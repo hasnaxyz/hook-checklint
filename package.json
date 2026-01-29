@@ -1,6 +1,6 @@
 {
   "name": "@hasnaxyz/hook-checklint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code hook that runs linting after file edits and creates tasks for errors",
   "type": "module",
   "bin": {
