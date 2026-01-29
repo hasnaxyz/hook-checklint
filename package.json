@@ -42,7 +42,7 @@
     "url": "https://github.com/hasnaxyz/hook-checklint.git"
   },
   "publishConfig": {
-    "access": "public",
+    "access": "restricted",
     "registry": "https://registry.npmjs.org/"
   },
   "engines": {
