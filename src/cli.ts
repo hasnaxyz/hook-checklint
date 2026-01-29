@@ -52,13 +52,18 @@ ${c.bold("USAGE:")}
   hook-checklint run                Execute hook ${c.dim("(called by Claude Code)")}
 
 ${c.bold("OPTIONS:")}
-  ${c.dim("(no args)")}      Auto-detect: if in git repo → install there, else → prompt
-  --global, -g   Apply to ~/.claude/settings.json
-  /path/to/repo  Apply to specific project path
+  ${c.dim("(no args)")}               Auto-detect: if in git repo → install there, else → prompt
+  --global, -g            Apply to ~/.claude/settings.json
+  --task-list-id, -t <id> Task list ID (non-interactive)
+  --keywords, -k <k1,k2>  Keywords, comma-separated (non-interactive)
+  --threshold, -n <num>   Edit threshold 3-7 (non-interactive)
+  --yes, -y               Non-interactive mode, use defaults
+  /path/to/repo           Apply to specific project path
 
 ${c.bold("EXAMPLES:")}
   hook-checklint install              ${c.dim("# Install with config prompts")}
   hook-checklint install --global     ${c.dim("# Global install")}
+  hook-checklint install -t myproject-bugfixes -n 5 -y  ${c.dim("# Non-interactive")}
   hook-checklint config               ${c.dim("# Update lint command, threshold")}
   hook-checklint status               ${c.dim("# Check what's installed")}
 
@@ -208,6 +213,42 @@ function getProjectTaskLists(projectPath: string): string[] {
     if (listLower.includes(dirLower)) return true;
     return false;
   });
+}
+
+interface InstallOptions {
+  global?: boolean;
+  taskListId?: string;
+  keywords?: string[];
+  threshold?: number;
+  yes?: boolean;
+  path?: string;
+}
+
+function parseInstallArgs(args: string[]): InstallOptions {
+  const options: InstallOptions = {};
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    if (arg === "--global" || arg === "-g") {
+      options.global = true;
+    } else if (arg === "--yes" || arg === "-y") {
+      options.yes = true;
+    } else if (arg === "--task-list-id" || arg === "-t") {
+      options.taskListId = args[++i];
+    } else if (arg === "--keywords" || arg === "-k") {
+      options.keywords = args[++i]?.split(",").map(k => k.trim().toLowerCase()).filter(Boolean);
+    } else if (arg === "--threshold" || arg === "-n") {
+      const num = parseInt(args[++i], 10);
+      if (!isNaN(num) && num >= 3 && num <= 7) {
+        options.threshold = num;
+      }
+    } else if (!arg.startsWith("-")) {
+      options.path = arg;
+    }
+  }
+
+  return options;
 }
 
 function detectLintCommand(cwd: string): string | null {
@@ -395,7 +436,28 @@ async function promptForConfig(existingConfig: CheckLintConfig = {}, projectPath
 async function install(args: string[]) {
   console.log(`\n${c.bold("hook-checklint install")}\n`);
 
-  const target = await resolveTarget(args);
+  const options = parseInstallArgs(args);
+
+  // Resolve target path
+  let target: { path: string | "global"; label: string } | null = null;
+
+  if (options.global) {
+    target = { path: "global", label: "global (~/.claude/settings.json)" };
+  } else if (options.path) {
+    const fullPath = resolve(options.path);
+    if (!existsSync(fullPath)) {
+      console.log(c.red("X"), `Path does not exist: ${fullPath}`);
+      return;
+    }
+    target = { path: fullPath, label: `project (${fullPath})` };
+  } else if (options.yes) {
+    // Non-interactive mode: use current directory
+    const cwd = process.cwd();
+    target = { path: cwd, label: `project (${cwd})` };
+  } else {
+    target = await resolveTarget(args);
+  }
+
   if (!target) return;
 
   const settingsPath = getSettingsPath(target.path);
@@ -403,18 +465,35 @@ async function install(args: string[]) {
 
   if (hookExists(settings)) {
     console.log(c.yellow("!"), `Hook already installed in ${target.label}`);
-    const update = await prompt("Update configuration? (y/n): ");
-    if (update.toLowerCase() !== "y") return;
+    if (!options.yes) {
+      const update = await prompt("Update configuration? (y/n): ");
+      if (update.toLowerCase() !== "y") return;
+    }
   } else {
     settings = addHook(settings);
   }
 
   // Configure
   const existingConfig = getConfig(settings);
-  const projectPath = target.path === "global" ? undefined : target.path;
-  const config = await promptForConfig(existingConfig, projectPath);
-  settings = setConfig(settings, config);
+  let config: CheckLintConfig;
 
+  if (options.yes || options.taskListId || options.keywords || options.threshold) {
+    // Non-interactive mode
+    config = {
+      ...existingConfig,
+      taskListId: options.taskListId || existingConfig.taskListId,
+      keywords: options.keywords || existingConfig.keywords || ["dev"],
+      editThreshold: options.threshold || existingConfig.editThreshold || 3,
+      createTasks: existingConfig.createTasks !== false ? true : existingConfig.createTasks,
+      enabled: true,
+    };
+  } else {
+    // Interactive mode
+    const projectPath = target.path === "global" ? undefined : target.path;
+    config = await promptForConfig(existingConfig, projectPath);
+  }
+
+  settings = setConfig(settings, config);
   writeSettings(settingsPath, settings);
 
   console.log();
