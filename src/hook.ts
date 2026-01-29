@@ -59,6 +59,12 @@ const CONFIG_KEY = "checkLintConfig";
 const STATE_DIR = join(homedir(), ".claude", "hook-state");
 const EDIT_TOOLS = ["Edit", "Write", "NotebookEdit"];
 
+function isValidRepoPattern(cwd: string): boolean {
+  const dirName = cwd.split("/").filter(Boolean).pop() || "";
+  // Match: hook-checklint, skill-installhook, iapp-mail, etc.
+  return /^[a-z]+-[a-z0-9-]+$/i.test(dirName);
+}
+
 function readStdinJson(): HookInput | null {
   try {
     const stdin = readFileSync(0, "utf-8");
@@ -329,6 +335,12 @@ export function run() {
 
   // Only process edit tools
   if (!EDIT_TOOLS.includes(tool_name)) {
+    approve();
+    return;
+  }
+
+  // Check repo pattern - only run for [prefix]-[name] folders
+  if (!isValidRepoPattern(cwd)) {
     approve();
     return;
   }
