@@ -1,0 +1,57 @@
+{
+  "name": "@hasnaxyz/hook-checklint",
+  "version": "0.1.0",
+  "description": "Claude Code hook that runs linting after file edits and creates tasks for errors",
+  "type": "module",
+  "bin": {
+    "hook-checklint": "./dist/cli.js"
+  },
+  "main": "./dist/hook.js",
+  "exports": {
+    ".": {
+      "import": "./dist/hook.js",
+      "types": "./dist/hook.d.ts"
+    },
+    "./cli": {
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun build ./src/cli.ts ./src/hook.ts --outdir ./dist --target node",
+    "prepublishOnly": "bun run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "hook",
+    "lint",
+    "eslint",
+    "biome",
+    "automation",
+    "cli"
+  ],
+  "author": "Hasna",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hasnaxyz/hook-checklint.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20",
+    "typescript": "^5.0.0"
+  }
+}
