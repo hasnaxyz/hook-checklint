@@ -59,6 +59,38 @@ const CONFIG_KEY = "checkLintConfig";
 const STATE_DIR = join(homedir(), ".claude", "hook-state");
 const EDIT_TOOLS = ["Edit", "Write", "NotebookEdit"];
 
+// Allowed lint commands - whitelist approach for security
+const ALLOWED_LINT_COMMANDS = [
+  "bun lint",
+  "bun lint:check",
+  "bun eslint",
+  "bun biome check",
+  "bunx @biomejs/biome check .",
+  "bunx eslint .",
+  "npm run lint",
+  "npm run lint:check",
+  "npx eslint .",
+  "npx @biomejs/biome check .",
+];
+
+/**
+ * Sanitize ID to prevent path traversal and injection attacks
+ */
+function sanitizeId(id: string): string {
+  if (!id || typeof id !== 'string') return 'default';
+  return id.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 100) || 'default';
+}
+
+/**
+ * Validate lint command against whitelist to prevent command injection
+ */
+function isValidLintCommand(cmd: string): boolean {
+  if (!cmd || typeof cmd !== 'string') return false;
+  return ALLOWED_LINT_COMMANDS.some(allowed =>
+    cmd === allowed || cmd.startsWith(allowed + " ")
+  );
+}
+
 function isValidRepoPattern(cwd: string): boolean {
   const dirName = cwd.split("/").filter(Boolean).pop() || "";
   // Match: hook-checklint, skill-installhook, iapp-mail, etc.
@@ -107,7 +139,8 @@ function getConfig(cwd: string): CheckLintConfig {
 
 function getStateFile(sessionId: string): string {
   mkdirSync(STATE_DIR, { recursive: true });
-  return join(STATE_DIR, `checklint-${sessionId}.json`);
+  const safeSessionId = sanitizeId(sessionId);
+  return join(STATE_DIR, `checklint-${safeSessionId}.json`);
 }
 
 function getSessionState(sessionId: string): SessionState {
@@ -362,7 +395,8 @@ export function run() {
     nameToCheck.toLowerCase().includes(keyword.toLowerCase())
   );
 
-  if (!matchesKeyword && keywords.length > 0 && nameToCheck) {
+  // If keywords are configured and we have a session name, check for match
+  if (keywords.length > 0 && nameToCheck && !matchesKeyword) {
     approve();
     return;
   }
@@ -389,7 +423,8 @@ export function run() {
     // Detect or use configured lint command
     const lintCommand = config.lintCommand || detectLintCommand(cwd);
 
-    if (lintCommand) {
+    // Validate lint command against whitelist to prevent command injection
+    if (lintCommand && isValidLintCommand(lintCommand)) {
       const { success, output } = runLint(cwd, lintCommand);
 
       if (!success) {
